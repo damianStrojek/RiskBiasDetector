@@ -1,0 +1,7 @@
+# Ignore all the key files
+files/.key
+
+# Ignore reports
+*.pdf
+# Ignore debug file with outputs from OpenAI API
+openai-log.txt
