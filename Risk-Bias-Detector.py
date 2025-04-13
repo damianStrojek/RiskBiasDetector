@@ -16,7 +16,6 @@ from fpdf import FPDF
 DEBUG = True
 TEMPERATURE = 0
 MODEL = "gpt-4o"
-IMAGE_MODEL = "dall-e-3"
 
 # Color constants
 RED='\033[1;31m'
@@ -113,18 +112,6 @@ def send_openai_request(client, userQuery, debug):
     
     return chatCompletion
 
-# Send custom request to OpeniAI API and retun response
-def send_custom_openai_request(client, systemPrompt, context, userQuery, debug):
-    messages = [{"role": "system", "content": systemPrompt},
-                {"role": "user", "content": userQuery},
-                {"role": "assistant", "content": context}]
-
-    chatCompletion = client.chat.completions.create(messages = messages, model = MODEL, temperature = TEMPERATURE)
-    chatCompletion = chatCompletion.choices[0].message.content.strip()
-    debug.write(chatCompletion + "\n")
-    
-    return chatCompletion
-
 # Send request to image generation model
 def send_dalle_request(client, userQuery, debug):
     response = client.images.generate(model=IMAGE_MODEL, prompt=userQuery, 
@@ -139,25 +126,33 @@ def send_dalle_request(client, userQuery, debug):
 # Print out welcoming banner
 def create_banner(client, debug):
     systemPrompt = """
-        You are a creative assistant. Your task is to return a banner that will be shown as the 
-        first thing after running the application."""
+        You are a creative assistant tasked with generating a clean and professional startup banner for an application.
+    """
     context = """
-        Return only plain text that can be printed immediately to the console. 
-        Do not include any functions, code, or markdown formatting. Avoid backticks and quotation marks. 
-        Do not include comments or explanations. Start the output with an ASCII art logo or visual related 
-        to the application's name or theme. Then include the application name: Risk Bias Detector. 
-        Add the current date, time, and approximate geolocation in a readable format (e.g., City, Country). 
-        Keep it stylish but minimal. The goal is to impress and inform the user at launch."""
+        Your output should be plain text, formatted for console display.
+        Start with an ASCII art representation of the app’s theme or name.
+        Avoid backticks.
+        Follow it with the app's name: 'Risk Bias Detector'.
+        Include the current date, time, and approximate geolocation, 
+        in a readable format (e.g., City, Country).
+        The banner should be stylish, minimal, and designed to impress the user on launch.
+    """
     userQuery = """
-        Generate a startup banner for a Python application named 'Risk Bias Detector'. 
-        This tool is used to identify and eliminate bias in AI-based decision-making. 
-        Make the design professional, with ASCII art at the top. 
-        Include the current date, time, and approximate geolocation."""
+        Create a console startup banner for a Python app called 'Risk Bias Detector'.
+        This app identifies and eliminates bias in AI decision-making.
+        Include an ASCII art logo, the current date and time, and approximate location.
+    """
     
     debug.write("\n" + "#" * 50 + "\n")
-    response = send_custom_openai_request(client, systemPrompt, context, userQuery, debug)
+    messages = [{"role": "system", "content": systemPrompt},
+                {"role": "user", "content": userQuery},
+                {"role": "assistant", "content": context}]
+
+    chatCompletion = client.chat.completions.create(messages = messages, model = MODEL, temperature = TEMPERATURE)
+    chatCompletion = chatCompletion.choices[0].message.content.strip()
+    debug.write(chatCompletion + "\n")
     
-    print("\n" + CYN + response + NC + "\n")
+    print("\n" + CYN + chatCompletion + NC + "\n")
     return
 
 def handle_demoqueries(client, debug):
