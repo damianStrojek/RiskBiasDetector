@@ -29,55 +29,46 @@ CYN='\033[1;36m'
 ITA='\033[3m'
 NC='\033[0m'
 
-# Create a class inheriting from FPDF for custom functions
-class PDFReport(FPDF):
+class BiasReportPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 16)
-        self.cell(0, 10, 'Vulnerability Scan Report', ln=True, align='C')
+        self.cell(0, 10, 'Risk Bias Detector - Analysis Report', ln=True, align='C')
 
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
         self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
 
-    def add_report_title(self):
-        self.set_font('Arial', 'B', 12)
-        self.cell(0, 10, f'Report generated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', ln=True)
-        self.ln(10)  # Line break
-
-    def add_host_report(self, hostData):
-        # Host details
-        self.set_font('Arial', 'B', 12)
-        self.cell(0, 10, f'Host: {hostData["host"]} ({hostData["status"]})', ln=True)
-
-        # Open ports
-        self.set_font('Arial', 'B', 10)
-        self.cell(0, 10, 'Open Ports:', ln=True)
+    def add_report_meta(self):
         self.set_font('Arial', '', 10)
-        self.cell(0, 10, ', '.join(map(str, hostData['openPorts'])), ln=True)
+        self.cell(0, 10, f'Report generated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', ln=True)
+        self.ln(10)
 
-        # Recommendations
-        if hostData['recommendations']:
-            self.set_font('Arial', 'B', 10)
-            self.cell(0, 10, 'Recommendations:', ln=True)
-            self.set_font('Arial', '', 10)
-            
-            # Split recommendations string by line breaks
-            recommendations = hostData['recommendations'].split('\n\n')
-            
-            for rec in recommendations:
-                # Wrap the recommendation text to fit into the PDF page
-                wrappedRecommendation = wrap_text(rec)
-                self.multi_cell(0, 10, wrappedRecommendation)
-        else:
-            self.cell(0, 10, 'No recommendations available.', ln=True)
+    def add_bias_event(self, userQuery, response):
+        self.set_font('Arial', 'B', 12)
+        self.multi_cell(0, 10, f'Event to Analyze:\n{userQuery}')
+        self.ln(3)
 
-        self.ln(10)  # Add space before next host
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, 'Analysis:', ln=True)
+        self.set_font('Arial', '', 10)
+        self.multi_cell(0, 10, response)
+        self.ln(3)
+
+def generate_bias_report_pdf(userQuery, response):
+    pdf = BiasReportPDF()
+    pdf.add_page()
+    pdf.add_report_meta()
+
+    pdf.add_bias_event(userQuery, response)
+    filename = f'report-{datetime.datetime.now().strftime("%m-%d-%H:%M:%S")}.pdf'
+    pdf.output(filename)
+
+    print(YEL + "[*] " + CYN + f"Filename of generated report: {filename}" + NC)
 
 # Prompt the user for their OpenAI API key (security measures)
 # or Read it from file that is excluded from the repo
 def set_openai_api_key():
-
     filePath = './files/.key'
     if os.path.exists(filePath):
         with open(filePath, 'r') as file:
@@ -193,16 +184,15 @@ def handle_demoqueries(client, debug):
     for idx, query in enumerate(demoqueries, start=1):
         print(YEL + f"[{idx}] " + ORN + f" {query}" + NC)
 
-    try:
-        choice = int(input(YEL + "[?] " + BLU + "Choose option: " + NC))
-        if 1 <= choice <= len(demoqueries):
-            selectedQuery = demoqueries[choice - 1]
-            response = send_openai_request(client, selectedQuery, debug)
-            print(ITA + "\n" + response + NC)
-        else:
-            print(YEL + "[!]" + RED + "Invalid selection." + NC) 
-    except ValueError:
-        print(YEL + "[!]" + RED + "Please enter a valid number." + NC)
+    choice = int(input(YEL + "[?] " + BLU + "Choose option: " + NC))
+
+    if 1 <= choice <= len(demoqueries):
+        selectedQuery = demoqueries[choice - 1]
+        response = send_openai_request(client, selectedQuery, debug)
+        print(ITA + "\n" + response + NC)
+        generate_bias_report_pdf(demoqueries[choice - 1], response)
+    else:
+        print(YEL + "[!]" + RED + "Invalid selection." + NC) 
     return
 
 # Provide a recursive menu for the user
@@ -217,36 +207,19 @@ def menu(client, debug):
         userQuery = input(YEL + "[?] " + BLU + "Enter a new 'security event': " + NC)
         response = send_openai_request(client, userQuery, debug)
         print(ITA + response + NC)
+        generate_bias_report_pdf(userQuery, response)
         menu(client, debug)
+        return
     elif choice == '2':
         handle_demoqueries(client, debug)
         menu(client, debug)
+        return
     elif choice == '3':
-        print("\n[+] Goodbye!")
         return
     else:
         print(YEL + "[!] " + RED + "Invalid option, please try again." + NC)
         menu(client, debug)
-    return
-
-# Create the PDF report
-def generate_pdf_report(scanResults, outputFilename='./files/Report.pdf'):
-    pdf = PDFReport()
-    pdf.add_page()
-    pdf.add_report_title()
-
-    for host in scanResults:
-        if host != scanResults[0]:
-            pdf.add_page()
-        pdf.add_host_report(host)
-    
-    pdf.output(outputFilename)
-    print(YEL + "[*] " + MAG + "Report saved as " + outputFilename + "." + NC)
-    return
-
-# Helper function to wrap long recommendation text
-def wrap_text(text, width=100):
-    return '\n'.join(textwrap.wrap(text, width))
+        return
 
 # Main function
 def main():
@@ -257,25 +230,6 @@ def main():
     create_banner(client, debug)
 
     menu(client, debug)
-        
-    # --------------------------
-    # PDF Report
-    # --------------------------
-    
-    #scanData = []
-
-    #for currentHost in activeHosts:
-        
-    #    hostReport = {
-    #        "host": currentHost.ipAddress,
-    #        "status": "online",
-    #        "openPorts": currentHost.openPorts,
-    #        "recommendations": currentHost.recommendations
-    #    }
-        
-    #    scanData.append(hostReport)
-
-    #generate_pdf_report(scanData)
         
     print(YEL + "[*] " + MAG + "The application is terminating." + NC)
     debug.close()
